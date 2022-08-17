@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -190,6 +191,19 @@ func (ht *httpTransporter) Del(url string) (*response, error) {
 	return r, err
 }
 
+func PrintBody(resp *http.Response, err error) {
+	bodyBytes, readerr := ioutil.ReadAll(resp.Body)
+	if readerr != nil {
+		log.Debugf("[textsecure] PUT while reading body %s\n", readerr)
+	}
+	closeErr := resp.Body.Close() //  must close
+	if closeErr != nil {
+		log.Debugf("[textsecure] PUT while closing body %s\n", closeErr)
+	}
+	resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+	log.Debugf("[textsecure] PUT response: %+v\nError: %+v\nBody: %+v\nBody read: %s\n", resp, err, resp.Body, bodyBytes)
+}
+
 func (ht *httpTransporter) Put(url string, body []byte, ct string) (*response, error) {
 	br := bytes.NewReader(body)
 	req, err := http.NewRequest("PUT", ht.baseURL+url, br)
@@ -202,6 +216,7 @@ func (ht *httpTransporter) Put(url string, body []byte, ct string) (*response, e
 	req.Header.Add("Content-Type", ct)
 	req.SetBasicAuth(ht.user, ht.pass)
 	resp, err := ht.client.Do(req)
+	PrintBody(resp, err)
 	if err != nil {
 		return nil, err
 	}
@@ -228,6 +243,7 @@ func (ht *httpTransporter) PutWithAuth(url string, body []byte, ct string, auth 
 	req.Header.Add("Content-Type", ct)
 	req.Header.Set("Authorization", auth)
 	resp, err := ht.client.Do(req)
+	PrintBody(resp, err)
 	if err != nil {
 		return nil, err
 	}
@@ -257,6 +273,7 @@ func (ht *httpTransporter) PutWithUnidentifiedSender(url string, body []byte, ct
 	unidentifiedAccessKeyBase64 := helpers.Base64EncWithoutPadding(unidentifiedAccessKey)
 	req.Header.Set("Unidentified-Access-Key", unidentifiedAccessKeyBase64)
 	resp, err := ht.client.Do(req)
+	PrintBody(resp, err)
 	if err != nil {
 		return nil, err
 	}
@@ -288,6 +305,7 @@ func (ht *httpTransporter) PutWithAuthCookies(url string, body []byte, ct string
 	req.Header.Set("Authorization", auth)
 
 	resp, err := ht.client.Do(req)
+	PrintBody(resp, err)
 	if err != nil {
 		return nil, err
 	}
@@ -329,6 +347,11 @@ func (ht *httpTransporter) PatchWithAuth(url string, body []byte, ct string, aut
 	req.Header.Add("Content-Type", ct)
 	req.Header.Set("Authorization", auth)
 	resp, err := ht.client.Do(req)
+	respbody := make([]byte, resp.ContentLength)
+	if _, readerr := resp.Body.Read(respbody); readerr != nil {
+		fmt.Printf("while reading body: %s", readerr)
+	}
+	fmt.Printf("Patch response: %+v\nError: %+v\nBody: %+vBody read: %s\n", resp, err, resp.Body, respbody)
 	if err != nil {
 		return nil, err
 	}
