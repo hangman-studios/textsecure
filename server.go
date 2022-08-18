@@ -86,6 +86,7 @@ var (
 
 	SENDER_CERTIFICATE_PATH         = "/v1/certificate/delivery"
 	SENDER_CERTIFICATE_NO_E164_PATH = "/v1/certificate/delivery?includeE164=false"
+	RATE_LIMIT_CHALLENGE_PATH       = "/v1/challenge"
 
 	KBS_AUTH_PATH = "/v1/backup/auth"
 
@@ -821,9 +822,10 @@ func buildMessage(reciever string, paddedMessage []byte, devices []uint32, isSyn
 }
 
 var (
-	mismatchedDevicesStatus = 409
-	staleDevicesStatus      = 410
-	rateLimitExceededStatus = 413
+	mismatchedDevicesStatus  = 409
+	staleDevicesStatus       = 410
+	rateLimitExceededStatus  = 413
+	rateLimitChallengeStatus = 428
 )
 
 type jsonMismatchedDevices struct {
@@ -835,6 +837,10 @@ type jsonStaleDevices struct {
 	StaleDevices []uint32 `json:"staleDevices"`
 }
 
+type jsonRateLimitChallenge struct {
+	Token string `json:"token"`
+}
+
 type sendMessageResponse struct {
 	NeedsSync bool   `json:"needsSync"`
 	Timestamp uint64 `json:"-"`
@@ -844,6 +850,8 @@ type sendMessageResponse struct {
 var ErrRemoteGone = errors.New("the remote device is gone (probably reinstalled)")
 
 var deviceLists = map[string][]uint32{}
+
+var rateLimitChallengeToken string
 
 func buildAndSendMessage(uuid string, paddedMessage []byte, isSync bool, timestamp *uint64) (*sendMessageResponse, error) {
 
@@ -907,6 +915,15 @@ func buildAndSendMessage(uuid string, paddedMessage []byte, isSync bool, timesta
 		}
 		return buildAndSendMessage(uuid, paddedMessage, isSync, timestamp)
 	}
+	if resp.Status == rateLimitChallengeStatus {
+		dec := json.NewDecoder(resp.Body)
+		var j jsonRateLimitChallenge
+		dec.Decode(&j)
+		rateLimitChallengeToken = j.Token
+		log.Debugf("[textsecure] ratelimit challange required: "+
+			"Get a recaptcha token at https://signalcaptchas.org/challenge/generate.html "+
+			"and call textsecure.SolveRateLimitChallenge(recaptchaToken), the challange token %s is kept in memory.\n", j.Token)
+	}
 	if resp.IsError() {
 		return nil, resp
 	}
@@ -918,4 +935,32 @@ func buildAndSendMessage(uuid string, paddedMessage []byte, isSync bool, timesta
 
 	log.Debugf("[textsecure] SendMessageResponse: %+v\n", smRes)
 	return &smRes, nil
+}
+
+type RateLimitChallenge struct {
+	Token   string `json:"token"`
+	Type    string `json:"type"`
+	Captcha string `json:"captcha"`
+}
+
+// SolveRateLimitChallenge sends a rate limit challenge with a given recaptcha token and the last challenge token from memory.
+func solveRateLimitChallenge(recaptchaToken string) error {
+	reg := RateLimitChallenge{
+		Token:   rateLimitChallengeToken,
+		Type:    "recaptcha",
+		Captcha: recaptchaToken,
+	}
+	body, err := json.Marshal(reg)
+	if err != nil {
+		return err
+	}
+	resp, err := transport.Transport.PutJSON(RATE_LIMIT_CHALLENGE_PATH, body)
+	log.Debugf("[textsecure] SolveRateLimitChallenge: %+v\n", resp)
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return resp
+	}
+	return nil
 }

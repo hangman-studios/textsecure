@@ -191,17 +191,17 @@ func (ht *httpTransporter) Del(url string) (*response, error) {
 	return r, err
 }
 
-func PrintBody(resp *http.Response, err error) {
+func PrintBody(resp *http.Response, err error, functionName string) {
 	bodyBytes, readerr := ioutil.ReadAll(resp.Body)
 	if readerr != nil {
-		log.Debugf("[textsecure] PUT while reading body %s\n", readerr)
+		log.Debugf("[textsecure] %s while reading body %s\n", functionName, readerr)
 	}
 	closeErr := resp.Body.Close() //  must close
 	if closeErr != nil {
-		log.Debugf("[textsecure] PUT while closing body %s\n", closeErr)
+		log.Debugf("[textsecure] %s while closing body %s\n", functionName, closeErr)
 	}
 	resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
-	log.Debugf("[textsecure] PUT response: %+v\nError: %+v\nBody: %+v\nBody read: %s\n", resp, err, resp.Body, bodyBytes)
+	log.Debugf("[textsecure] %s response: %+v\nError: %+v\nBody: %+v\nBody read: %s\n", functionName, resp, err, resp.Body, bodyBytes)
 }
 
 func (ht *httpTransporter) Put(url string, body []byte, ct string) (*response, error) {
@@ -216,7 +216,7 @@ func (ht *httpTransporter) Put(url string, body []byte, ct string) (*response, e
 	req.Header.Add("Content-Type", ct)
 	req.SetBasicAuth(ht.user, ht.pass)
 	resp, err := ht.client.Do(req)
-	PrintBody(resp, err)
+	PrintBody(resp, err, "PUT")
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +243,7 @@ func (ht *httpTransporter) PutWithAuth(url string, body []byte, ct string, auth 
 	req.Header.Add("Content-Type", ct)
 	req.Header.Set("Authorization", auth)
 	resp, err := ht.client.Do(req)
-	PrintBody(resp, err)
+	PrintBody(resp, err, "PutWithAuth")
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +273,7 @@ func (ht *httpTransporter) PutWithUnidentifiedSender(url string, body []byte, ct
 	unidentifiedAccessKeyBase64 := helpers.Base64EncWithoutPadding(unidentifiedAccessKey)
 	req.Header.Set("Unidentified-Access-Key", unidentifiedAccessKeyBase64)
 	resp, err := ht.client.Do(req)
-	PrintBody(resp, err)
+	PrintBody(resp, err, "PutWithUnidentifiedSender")
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +305,7 @@ func (ht *httpTransporter) PutWithAuthCookies(url string, body []byte, ct string
 	req.Header.Set("Authorization", auth)
 
 	resp, err := ht.client.Do(req)
-	PrintBody(resp, err)
+	PrintBody(resp, err, "PutWithAuthCookies")
 	if err != nil {
 		return nil, err
 	}

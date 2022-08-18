@@ -141,6 +141,11 @@ func SendMessage(uuid, msg string, timer uint32) (uint64, error) {
 	return sendMessage(omsg)
 }
 
+// SolveRateLimitChallenge sends a rate limit challenge with a given recaptcha token and the last challenge token from memory.
+func SolveRateLimitChallenge(recaptchaToken string) error {
+	return solveRateLimitChallenge(recaptchaToken)
+}
+
 // MIMETypeFromReader returns the mime type that is inside the reader
 func MIMETypeFromReader(r io.Reader) (mime string, reader io.Reader) {
 	var buf bytes.Buffer
