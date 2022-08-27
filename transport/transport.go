@@ -192,6 +192,10 @@ func (ht *httpTransporter) Del(url string) (*response, error) {
 }
 
 func PrintBodyAndHeader(resp *http.Response, err error, functionName string) {
+	if resp == nil {
+		log.Debugf("[textsecure] PrintBodyAndHeader resp is nil, err is: %s, function: %s", err, functionName)
+		return
+	}
 	bodyBytes, readerr := ioutil.ReadAll(resp.Body)
 	if readerr != nil {
 		log.Debugf("[textsecure] %s while reading body %s\n", functionName, readerr)
