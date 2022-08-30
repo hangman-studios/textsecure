@@ -11,6 +11,8 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/signal-golang/textsecure/helpers"
@@ -213,9 +215,25 @@ func PrintBodyAndHeader(resp *http.Response, err error, functionName string, end
 		log.Debugf("[textsecure] %s while closing body %s\n", functionName, closeErr)
 	}
 	resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
-	endpointCalls[endpoint]++
+	tokens := strings.Split(endpoint, "/")
+	filteredTokens := make([]string, 0, 4)
+	var hasLetters = regexp.MustCompile(`[a-zA-Z]+`).MatchString
+	var hasNumbers = regexp.MustCompile(`[0-9]+`).MatchString
+	for _, token := range tokens {
+		onlyLetters := true
+		if hasLetters(token) && hasNumbers(token) || hasNumbers(token) {
+			onlyLetters = false
+		}
+		if onlyLetters {
+			filteredTokens = append(filteredTokens, token)
+		} else {
+			filteredTokens = append(filteredTokens, "...")
+		}
+	}
+	filteredEndpoint := strings.Join(filteredTokens, "/")
+	endpointCalls[filteredEndpoint]++
 	log.Debugf("[textsecure] %s response: %+v", functionName, resp)
-	log.Debugf("Called: %s, times: %d", endpoint, endpointCalls[endpoint])
+	log.Debugf("Called: %s, times: %d", filteredEndpoint, endpointCalls[filteredEndpoint])
 	log.Debugf("Error: %+v", err)
 	log.Debugf("Headers:")
 	for key, value := range resp.Header {
