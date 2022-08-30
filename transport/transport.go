@@ -131,6 +131,7 @@ func (ht *httpTransporter) Get(url string) (*response, error) {
 	}
 	req.SetBasicAuth(ht.user, ht.pass)
 	resp, err := ht.client.Do(req)
+	PrintBodyAndHeader(resp, err, "Get", url)
 	if err != nil {
 		return nil, err
 	}
@@ -154,6 +155,7 @@ func (ht *httpTransporter) GetWithAuth(url string, auth string) (*response, erro
 	}
 	req.Header.Set("Authorization", auth)
 	resp, err := ht.client.Do(req)
+	PrintBodyAndHeader(resp, err, "GetWithAuth", url)
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +179,7 @@ func (ht *httpTransporter) Del(url string) (*response, error) {
 	}
 	req.SetBasicAuth(ht.user, ht.pass)
 	resp, err := ht.client.Do(req)
+	PrintBodyAndHeader(resp, err, "Del", url)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +194,12 @@ func (ht *httpTransporter) Del(url string) (*response, error) {
 	return r, err
 }
 
-func PrintBodyAndHeader(resp *http.Response, err error, functionName string) {
+var endpointCalls map[string]int
+
+func PrintBodyAndHeader(resp *http.Response, err error, functionName string, endpoint string) {
+	if endpointCalls == nil {
+		endpointCalls = make(map[string]int, 6)
+	}
 	if resp == nil {
 		log.Debugf("[textsecure] PrintBodyAndHeader resp is nil, err is: %s, function: %s", err, functionName)
 		return
@@ -205,7 +213,9 @@ func PrintBodyAndHeader(resp *http.Response, err error, functionName string) {
 		log.Debugf("[textsecure] %s while closing body %s\n", functionName, closeErr)
 	}
 	resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+	endpointCalls[endpoint]++
 	log.Debugf("[textsecure] %s response: %+v", functionName, resp)
+	log.Debugf("Called: %s, times: %d", endpoint, endpointCalls[endpoint])
 	log.Debugf("Error: %+v", err)
 	log.Debugf("Headers:")
 	for key, value := range resp.Header {
@@ -228,7 +238,7 @@ func (ht *httpTransporter) Put(url string, body []byte, ct string) (*response, e
 	req.Header.Add("Content-Type", ct)
 	req.SetBasicAuth(ht.user, ht.pass)
 	resp, err := ht.client.Do(req)
-	PrintBodyAndHeader(resp, err, "PUT")
+	PrintBodyAndHeader(resp, err, "PUT", url)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +265,7 @@ func (ht *httpTransporter) PutWithAuth(url string, body []byte, ct string, auth 
 	req.Header.Add("Content-Type", ct)
 	req.Header.Set("Authorization", auth)
 	resp, err := ht.client.Do(req)
-	PrintBodyAndHeader(resp, err, "PutWithAuth")
+	PrintBodyAndHeader(resp, err, "PutWithAuth", url)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +295,7 @@ func (ht *httpTransporter) PutWithUnidentifiedSender(url string, body []byte, ct
 	unidentifiedAccessKeyBase64 := helpers.Base64EncWithoutPadding(unidentifiedAccessKey)
 	req.Header.Set("Unidentified-Access-Key", unidentifiedAccessKeyBase64)
 	resp, err := ht.client.Do(req)
-	PrintBodyAndHeader(resp, err, "PutWithUnidentifiedSender")
+	PrintBodyAndHeader(resp, err, "PutWithUnidentifiedSender", url)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +327,7 @@ func (ht *httpTransporter) PutWithAuthCookies(url string, body []byte, ct string
 	req.Header.Set("Authorization", auth)
 
 	resp, err := ht.client.Do(req)
-	PrintBodyAndHeader(resp, err, "PutWithAuthCookies")
+	PrintBodyAndHeader(resp, err, "PutWithAuthCookies", url)
 	if err != nil {
 		return nil, err
 	}
@@ -359,6 +369,7 @@ func (ht *httpTransporter) PatchWithAuth(url string, body []byte, ct string, aut
 	req.Header.Add("Content-Type", ct)
 	req.Header.Set("Authorization", auth)
 	resp, err := ht.client.Do(req)
+	PrintBodyAndHeader(resp, err, "PatchWithAuth", url)
 	respbody := make([]byte, resp.ContentLength)
 	if _, readerr := resp.Body.Read(respbody); readerr != nil {
 		fmt.Printf("while reading body: %s", readerr)
