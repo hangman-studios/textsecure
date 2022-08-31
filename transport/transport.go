@@ -196,11 +196,11 @@ func (ht *httpTransporter) Del(url string) (*response, error) {
 	return r, err
 }
 
-var endpointCalls map[string]int
+var endpointCalls map[string][]time.Time
 
 func PrintBodyAndHeader(resp *http.Response, err error, functionName string, endpoint string) {
 	if endpointCalls == nil {
-		endpointCalls = make(map[string]int, 6)
+		endpointCalls = make(map[string][]time.Time, 6)
 	}
 	if resp == nil {
 		log.Debugf("[textsecure] PrintBodyAndHeader resp is nil, err is: %s, function: %s", err, functionName)
@@ -231,9 +231,16 @@ func PrintBodyAndHeader(resp *http.Response, err error, functionName string, end
 		}
 	}
 	filteredEndpoint := strings.Join(filteredTokens, "/")
-	endpointCalls[filteredEndpoint]++
+	tmp := make([]time.Time, 0, len(endpointCalls[filteredEndpoint]))
+	for _, timestamp := range endpointCalls[filteredEndpoint] {
+		if time.Now().Sub(timestamp) < time.Second*60 {
+			tmp = append(tmp, timestamp)
+		}
+	}
+	tmp = append(tmp, time.Now())
+	endpointCalls[filteredEndpoint] = tmp
 	log.Debugf("[textsecure] %s response: %+v", functionName, resp)
-	log.Debugf("Called: %s, times: %d", filteredEndpoint, endpointCalls[filteredEndpoint])
+	log.Debugf("Called: %s, calls/min: %d", filteredEndpoint, len(endpointCalls[filteredEndpoint]))
 	log.Debugf("Error: %+v", err)
 	log.Debugf("Headers:")
 	for key, value := range resp.Header {
