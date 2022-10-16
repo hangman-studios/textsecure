@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 
 	"bytes"
@@ -244,7 +243,7 @@ func setupLogging() {
 	if loglevel == "" {
 		loglevel = os.Getenv("TEXTSECURE_LOGLEVEL")
 	}
-
+	fmt.Printf("INFO[0000] [textsecure] Setting log level to %s\n", loglevel)
 	switch strings.ToUpper(loglevel) {
 	case "DEBUG":
 		log.SetLevel(log.DebugLevel)
@@ -266,11 +265,11 @@ func setupLogging() {
 
 // Setup initializes the package.
 func Setup(c *Client) error {
-	go crayfish.Run()
 	var err error
 	client = c
 
 	config.ConfigFile, err = loadConfig()
+	go crayfish.Run()
 	if err != nil {
 		return err
 	}
@@ -362,7 +361,8 @@ func Setup(c *Client) error {
 			}
 		}
 	}
-	if len(config.ConfigFile.ProfileKeyCredential) == 0 || true {
+	if len(config.ConfigFile.ProfileKeyCredential) == 0 {
+		log.Infoln("[textsecure] Generating profile key credential")
 		profiles.UpdateProfile(config.ConfigFile.ProfileKey, config.ConfigFile.UUID, config.ConfigFile.Name)
 		profile, err := profiles.GetProfileAndCredential(config.ConfigFile.UUID, config.ConfigFile.ProfileKey)
 		if err != nil {
@@ -371,6 +371,8 @@ func Setup(c *Client) error {
 		config.ConfigFile.ProfileKeyCredential = []byte(profile.Credential)
 		saveConfig(config.ConfigFile)
 
+	} else {
+		log.Infoln("[textsecure] Using existing profile key credential", len(config.ConfigFile.ProfileKeyCredential))
 	}
 
 	return err
@@ -464,7 +466,7 @@ func registerDevice() error {
 
 func handleReceipt(env *signalservice.Envelope) {
 	if client.ReceiptHandler != nil {
-		client.ReceiptHandler(env.GetSourceUuid(), env.GetSourceDevice(), env.GetTimestamp())
+		client.ReceiptHandler(env.GetSourceUuid(), env.GetSourceDevice(), env.GetServerTimestamp())
 	}
 }
 
@@ -585,7 +587,7 @@ func handleReceivedMessage(env *signalservice.Envelope) error {
 			// try the legacy way
 			log.Infof("[textsecure] Incoming WhisperMessage try legacy decrypting")
 
-			recid, err := recID(env.GetSourceE164())
+			recid, err := recID(env.GetSourceUuid())
 			if err != nil {
 				recid = env.GetSourceUuid()
 			}
@@ -600,7 +602,7 @@ func handleReceivedMessage(env *signalservice.Envelope) error {
 			return err
 		}
 		b = stripPadding(b)
-		err = handleMessage(env.GetSourceE164(), env.GetSourceUuid(), env.GetTimestamp(), b)
+		err = handleMessage(env.GetSourceUuid(), env.GetSourceUuid(), env.GetServerTimestamp(), b)
 		if err != nil {
 			return err
 		}
@@ -628,7 +630,7 @@ func handleReceivedMessage(env *signalservice.Envelope) error {
 			return err
 		}
 		b = stripPadding(b)
-		err = handleMessage(env.GetSourceE164(), env.GetSourceUuid(), env.GetTimestamp(), b)
+		err = handleMessage(env.GetSourceUuid(), env.GetSourceUuid(), env.GetServerTimestamp(), b)
 		if err != nil {
 			return err
 		}
@@ -639,6 +641,7 @@ func handleReceivedMessage(env *signalservice.Envelope) error {
 		}
 
 		p, _ := proto.Marshal(env)
+		log.Debugf("[textsecure] Incoming UnidentifiedSenderMessage %s.\n", *env.DestinationUuid)
 		data, err := crayfish.Instance.HandleEnvelope(p)
 		if err != nil {
 			return err
@@ -648,9 +651,13 @@ func handleReceivedMessage(env *signalservice.Envelope) error {
 			return err
 		}
 		env.Content = content
-		phoneNumber := "+" + strconv.FormatUint(data.Sender.PhoneNumber.Code.Value, 10) + strconv.FormatUint(data.Sender.PhoneNumber.National.Value, 10)
-		log.Println("[textsecure] handleReceivedMessage:", phoneNumber, data.Sender.UUID)
-		err = handleMessage(phoneNumber, data.Sender.UUID, uint64(data.Timestamp), content)
+		log.Println("[textsecure] handleReceivedMessage:", data.Sender.UUID)
+		log.Debugln("[textsecure] handleReceivedMessage content length: ", len(content))
+		if len(content) == 0 {
+			err = errors.New("[textsecure] handleReceivedMessage content length is 0")
+			return err
+		}
+		err = handleMessage("", data.Sender.UUID, uint64(data.Timestamp), content)
 		if err != nil {
 			return err
 		}

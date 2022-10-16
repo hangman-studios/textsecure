@@ -224,7 +224,15 @@ func (g *GroupV2) UpdateGroupFromServer() error {
 
 	return nil
 }
+func GetGroupV2MembersForGroup(group string) ([]*signalservice.DecryptedMember, error) {
+	g := FindGroup(group)
+	if g == nil {
+		return nil, fmt.Errorf("Group not found")
+	}
+	g.UpdateGroupFromServer()
 
+	return g.DecryptedGroup.Members, nil
+}
 func HandleGroupsV2(src string, dm *signalservice.DataMessage) (*GroupV2, error) {
 	groupContext := dm.GetGroupV2()
 	if groupContext == nil {
@@ -344,7 +352,7 @@ func saveGroupV2(hexid string) error {
 
 // loadGroup loads a group's state from a file.
 func loadGroupV2(hexid string) (*GroupV2, error) {
-	b, err := ioutil.ReadFile(idToPath(hexid))
+	b, err := os.ReadFile(idToPath(hexid))
 	if err != nil {
 		return nil, err
 	}

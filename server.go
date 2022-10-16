@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"mime/quotedprintable"
 	"regexp"
 	"strconv"
@@ -23,6 +23,7 @@ import (
 	"github.com/signal-golang/textsecure/contactDiscoveryCrypto"
 	"github.com/signal-golang/textsecure/contacts"
 	"github.com/signal-golang/textsecure/contactsDiscovery"
+	"github.com/signal-golang/textsecure/groupsv2"
 	"github.com/signal-golang/textsecure/profiles"
 	signalservice "github.com/signal-golang/textsecure/protobuf"
 	"github.com/signal-golang/textsecure/registration"
@@ -340,8 +341,6 @@ func SetAccountCapabilities(capabilities config.AccountCapabilities) error {
 
 // SetAccountAttributes updates the account attributes
 func setAccountAttributes(attributes *UpdateAccountAttributes) error {
-	attributes.Capabilities.Gv2_2 = true
-	attributes.Capabilities.Gv2_3 = true
 	body, err := json.Marshal(attributes)
 	if err != nil {
 		return err
@@ -364,6 +363,43 @@ func setAccountAttributes(attributes *UpdateAccountAttributes) error {
 
 type whoAmIResponse struct {
 	UUID string `json:"uuid"`
+}
+
+func GetProfile(uuid string, profileKey []byte) (*profiles.Profile, error) {
+	profile, err := profiles.GetProfile(uuid, profileKey)
+	if err != nil {
+		return nil, err
+	}
+	return profile, nil
+}
+func GetProfileByUUID(uuid string) (*profiles.Profile, error) {
+	profile, err := profiles.GetProfileUUID(uuid)
+	if err != nil {
+		return nil, err
+	}
+	return profile, nil
+}
+func GetAvatar(uuid string) (io.ReadCloser, error) {
+	return profiles.GetLocalAvatar(uuid)
+}
+func GetAvatarPath(uuid string) (string, error) {
+	return profiles.GetLocalAvatarPath(uuid)
+}
+
+func GetProfileAndCredential(uuid string, profileKey []byte) (*profiles.Profile, error) {
+	if uuid == "" || len(profileKey) == 0 {
+		return nil, fmt.Errorf("uuid or profileKey is empty")
+	}
+	profile, err := profiles.GetProfileAndCredential(uuid, profileKey)
+	if err != nil {
+		return nil, err
+	}
+	return profile, nil
+}
+
+// GetGroupV2MembersForGroup returns the members of a group
+func GetGroupV2MembersForGroup(group string) ([]*signalservice.DecryptedMember, error) {
+	return groupsv2.GetGroupV2MembersForGroup(group)
 }
 
 // GetMyUUID returns the uid from the current user
@@ -443,11 +479,11 @@ func addNewDevice(ephemeralId, publicKey, verificationCode string) error {
 	theirPublicKey := axolotl.NewECPublicKey(decPk)
 
 	pm := &signalservice.ProvisionMessage{
-		IdentityKeyPublic:  identityKey.PublicKey.Serialize(),
-		IdentityKeyPrivate: identityKey.PrivateKey.Key()[:],
-		Uuid:               &config.ConfigFile.UUID,
-		ProvisioningCode:   &verificationCode,
-		Number:             &config.ConfigFile.Tel,
+		AciIdentityKeyPublic:  identityKey.PublicKey.Serialize(),
+		AciIdentityKeyPrivate: identityKey.PrivateKey.Key()[:],
+		Aci:                   &config.ConfigFile.UUID,
+		ProvisioningCode:      &verificationCode,
+		Number:                &config.ConfigFile.Tel,
 	}
 
 	ciphertext, err := provisioningCipher(pm, theirPublicKey)
@@ -609,7 +645,7 @@ func GetRegisteredContacts() ([]contacts.Contact, error) {
 	for _, c := range localContacts {
 		t := c.Tel
 		// check if the contact is a valid phone number and if it is not a duplicate
-		if re.MatchString(t) && tokensMap[t] == nil {
+		if t != "" && re.MatchString(t) && tokensMap[t] == nil {
 			tokens = append(tokens, t)
 			tokensMap[t] = &t
 		} else {
@@ -655,7 +691,7 @@ func GetRegisteredContacts() ([]contacts.Contact, error) {
 		UUID := idToHexUUID(responseData[ind*uuidlength : (ind+1)*uuidlength])
 		index := findIndexByE147(phone, localContacts)
 		if strings.Count(localContacts[index].Name, "=") > 2 {
-			decodedName, err := ioutil.ReadAll(quotedprintable.NewReader(strings.NewReader(localContacts[index].Name)))
+			decodedName, err := io.ReadAll(quotedprintable.NewReader(strings.NewReader(localContacts[index].Name)))
 			if err != nil {
 				log.Debug("[textsecure] GetRegisteredContacts update name from quoted printable error:", err)
 			} else {
@@ -739,14 +775,6 @@ func createMessage(msg *outgoingMessage) *signalservice.DataMessage {
 		if msg.attachment.voiceNote {
 			var flag uint32 = 1
 			dm.Attachments[0].Flags = &flag
-		}
-	}
-	if msg.group != nil {
-		dm.Group = &signalservice.GroupContext{
-			Id:          msg.group.id,
-			Type:        &msg.group.typ,
-			Name:        &msg.group.name,
-			MembersE164: msg.group.members,
 		}
 	}
 	if msg.groupV2 != nil {
