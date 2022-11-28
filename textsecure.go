@@ -90,8 +90,9 @@ func needsRegistration() bool {
 
 var identityKey *axolotl.IdentityKeyPair
 
-type att struct {
-	id        uint64
+type attachmentPointerV3 struct {
+	cdnKey    string
+	cdnNr     uint32
 	ct        string
 	keys      []byte
 	digest    []byte
@@ -104,7 +105,7 @@ type outgoingMessage struct {
 	msg         string
 	group       *groupMessage
 	groupV2     *signalservice.GroupContextV2
-	attachment  *att
+	attachment  *attachmentPointerV3
 	flags       uint32
 	expireTimer uint32
 	timestamp   *uint64
@@ -240,7 +241,7 @@ var (
 // and environment variables
 func setupLogging() {
 	loglevel := config.ConfigFile.LogLevel
-	if loglevel == "" {
+	if loglevel == "" || os.Getenv("TEXTSECURE_LOGLEVEL") != "" {
 		loglevel = os.Getenv("TEXTSECURE_LOGLEVEL")
 	}
 	fmt.Printf("INFO[0000] [textsecure] Setting log level to %s\n", loglevel)
@@ -254,7 +255,7 @@ func setupLogging() {
 	case "ERROR":
 		log.SetLevel(log.ErrorLevel)
 	default:
-		log.SetLevel(log.ErrorLevel)
+		log.SetLevel(log.InfoLevel)
 	}
 
 	log.SetFormatter(&log.TextFormatter{
@@ -319,9 +320,10 @@ func Setup(c *Client) error {
 	client.RegistrationDone()
 	rootCa.SetupCA(config.ConfigFile.RootCA)
 	transport.SetupTransporter(config.ConfigFile.Server, config.ConfigFile.UUID, registration.Registration.Password, config.ConfigFile.UserAgent, config.ConfigFile.ProxyServer)
-	transport.SetupCDNTransporter(SIGNAL_CDN_URL, config.ConfigFile.UUID, registration.Registration.Password, config.ConfigFile.UserAgent, config.ConfigFile.ProxyServer)
+	transport.SetupCDNTransporter(SIGNAL_CDN2_URL, config.ConfigFile.UUID, registration.Registration.Password, config.ConfigFile.UserAgent, config.ConfigFile.ProxyServer)
 	transport.SetupDirectoryTransporter(DIRECTORY_URL, config.ConfigFile.UUID, registration.Registration.Password, config.ConfigFile.UserAgent, config.ConfigFile.ProxyServer)
 	transport.SetupStorageTransporter(STORAGE_URL, config.ConfigFile.UUID, registration.Registration.Password, config.ConfigFile.UserAgent, config.ConfigFile.ProxyServer)
+	transport.SetupServiceTransporter(SIGNAL_SERVICE_URL, config.ConfigFile.UUID, registration.Registration.Password, config.ConfigFile.UserAgent, config.ConfigFile.ProxyServer)
 	identityKey, err = textSecureStore.GetIdentityKeyPair()
 	// check if we have a uuid and if not get it
 	// config.ConfigFile = checkUUID(config.ConfigFile)
@@ -411,6 +413,8 @@ func registerDevice() error {
 	client.GetConfig()
 	phoneNumber := client.GetPhoneNumber()
 	captcha := client.GetCaptchaToken()
+	name := client.GetUsername()
+	registration.Registration.Name = name
 	err = RegisterWithCrayfish(&registration.Registration, phoneNumber, captcha)
 	if err != nil {
 		log.Errorln("[textsecure] Crayfish registration failed", err)
@@ -424,6 +428,7 @@ func registerDevice() error {
 	}
 	config.ConfigFile.Tel = crayfishRegistration.Tel
 	config.ConfigFile.UUID = crayfishRegistration.UUID
+	config.ConfigFile.Name = name
 	config.ConfigFile.AccountCapabilities = config.AccountCapabilities{
 		// Uuid:              false,
 		Gv2:               true,
@@ -435,6 +440,9 @@ func registerDevice() error {
 	}
 
 	err = saveConfig(config.ConfigFile)
+	if err != nil {
+		return err
+	}
 	log.Debugln("[textsecure] Crayfish registration done")
 	transport.SetupTransporter(config.ConfigFile.Server, config.ConfigFile.UUID, registration.Registration.Password, config.ConfigFile.UserAgent, config.ConfigFile.ProxyServer)
 
@@ -466,7 +474,7 @@ func registerDevice() error {
 
 func handleReceipt(env *signalservice.Envelope) {
 	if client.ReceiptHandler != nil {
-		client.ReceiptHandler(env.GetSourceUuid(), env.GetSourceDevice(), env.GetServerTimestamp())
+		client.ReceiptHandler(env.GetSourceUuid(), env.GetSourceDevice(), env.GetTimestamp())
 	}
 }
 

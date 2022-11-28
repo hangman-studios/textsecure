@@ -36,6 +36,7 @@ import (
 
 var (
 	SERVICE_REFLECTOR_HOST = "europe-west1-signal-cdn-reflector.cloudfunctions.net"
+	SIGNAL_SERVICE_URL     = "https://chat.signal.org"
 	SIGNAL_CDN_URL         = "https://cdn.signal.org"
 	SIGNAL_CDN2_URL        = "https://cdn2.signal.org"
 	DIRECTORY_URL          = "https://api.directory.signal.org"
@@ -56,7 +57,6 @@ var (
 	DELETE_USERNAME_PATH      = "/v1/accounts/username"
 	DELETE_ACCOUNT_PATH       = "/v1/accounts/me"
 
-	allocateAttachmentPath   = "/v1/attachments/"
 	attachmentPath           = "/v2/attachments/form/upload"
 	ATTACHMENT_DOWNLOAD_PATH = "/v2/attachments/"
 
@@ -720,6 +720,12 @@ func GetRegisteredContacts() ([]contacts.Contact, error) {
 }
 
 // Attachment handling
+type attachmentV3UploadAttributes struct {
+	Cdn                  uint32            `json:"cdn"`
+	Key                  string            `json:"key"`
+	Headers              map[string]string `json:"headers"`
+	SignedUploadLocation string            `json:"signedUploadLocation"`
+}
 
 type jsonAllocation struct {
 	ID       uint64 `json:"id"`
@@ -754,8 +760,8 @@ func createMessage(msg *outgoingMessage) *signalservice.DataMessage {
 	}
 	dm.ExpireTimer = &msg.expireTimer
 	if msg.attachment != nil {
-		id := signalservice.AttachmentPointer_CdnId{
-			CdnId: msg.attachment.id,
+		id := signalservice.AttachmentPointer_CdnKey{
+			CdnKey: msg.attachment.cdnKey,
 		}
 		// todo send file names
 		filename := ""
@@ -765,6 +771,7 @@ func createMessage(msg *outgoingMessage) *signalservice.DataMessage {
 		dm.Attachments = []*signalservice.AttachmentPointer{
 			{
 				AttachmentIdentifier: &id,
+				CdnNumber:            &msg.attachment.cdnNr,
 				ContentType:          &msg.attachment.ct,
 				Key:                  msg.attachment.keys[:],
 				Digest:               msg.attachment.digest[:],

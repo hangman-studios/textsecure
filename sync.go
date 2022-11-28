@@ -86,6 +86,7 @@ func handleSyncMessage(src string, srcUUID string, timestamp uint64, sm *signals
 func handleSyncSent(s *signalservice.SyncMessage_Sent, ts uint64) error {
 	dm := s.GetMessage()
 	dest := s.GetDestinationE164()
+	destUUID := s.GetDestinationUuid()
 
 	if dm == nil {
 		return fmt.Errorf("DataMessage was nil for SyncMessage_Sent")
@@ -111,15 +112,16 @@ func handleSyncSent(s *signalservice.SyncMessage_Sent, ts uint64) error {
 
 	msg := &Message{
 		source:      dest,
+		sourceUUID:  destUUID,
 		message:     dm.GetBody(),
 		attachments: atts,
 		groupV2:     grV2,
-		contact:     cs,
 		flags:       flags,
 		expireTimer: dm.GetExpireTimer(),
 		profileKey:  dm.GetProfileKey(),
 		timestamp:   *dm.Timestamp,
 		quote:       dm.GetQuote(),
+		contact:     cs,
 		sticker:     dm.GetSticker(),
 		reaction:    dm.GetReaction(),
 	}
@@ -186,7 +188,7 @@ func sendContactUpdate() error {
 
 	}
 
-	a, err := uploadAttachment(&buf, "application/octet-stream")
+	attachmentPointer, err := uploadAttachment(&buf, "application/octet-stream")
 	if err != nil {
 		return err
 	}
@@ -194,13 +196,14 @@ func sendContactUpdate() error {
 	sm := &signalservice.SyncMessage{
 		Contacts: &signalservice.SyncMessage_Contacts{
 			Blob: &signalservice.AttachmentPointer{
-				AttachmentIdentifier: &signalservice.AttachmentPointer_CdnId{
-					CdnId: a.id,
+				AttachmentIdentifier: &signalservice.AttachmentPointer_CdnKey{
+					CdnKey: attachmentPointer.cdnKey,
 				},
-				ContentType: &a.ct,
-				Key:         a.keys[:],
-				Digest:      a.digest[:],
-				Size:        &a.size,
+				CdnNumber:   &attachmentPointer.cdnNr,
+				ContentType: &attachmentPointer.ct,
+				Key:         attachmentPointer.keys[:],
+				Digest:      attachmentPointer.digest[:],
+				Size:        &attachmentPointer.size,
 			},
 		},
 	}
@@ -233,7 +236,7 @@ func sendGroupUpdate() error {
 		buf.Write(b)
 	}
 
-	a, err := uploadAttachment(&buf, "application/octet-stream")
+	attachmentPointer, err := uploadAttachment(&buf, "application/octet-stream")
 	if err != nil {
 		return err
 	}
@@ -241,13 +244,14 @@ func sendGroupUpdate() error {
 	sm := &signalservice.SyncMessage{
 		Groups: &signalservice.SyncMessage_Groups{
 			Blob: &signalservice.AttachmentPointer{
-				AttachmentIdentifier: &signalservice.AttachmentPointer_CdnId{
-					CdnId: a.id,
+				AttachmentIdentifier: &signalservice.AttachmentPointer_CdnKey{
+					CdnKey: attachmentPointer.cdnKey,
 				},
-				ContentType: &a.ct,
-				Key:         a.keys[:],
-				Digest:      a.digest[:],
-				Size:        &a.size,
+				CdnNumber:   &attachmentPointer.cdnNr,
+				ContentType: &attachmentPointer.ct,
+				Key:         attachmentPointer.keys[:],
+				Digest:      attachmentPointer.digest[:],
+				Size:        &attachmentPointer.size,
 			},
 		},
 	}
